@@ -1,4 +1,3 @@
-@'
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -51,4 +50,3 @@ export async function storageDelete(relKey) {
   await client.send(new DeleteObjectCommand({ Bucket: getBucket(), Key: key }));
   console.log(`[Storage] Deleted: ${key}`);
 }
-'@ | Set-Content -Path "D:\lao_thai_learning_app_complete\lao_thai_learning_app\server\storage.ts" -Encoding UTF8
