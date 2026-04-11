@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE `beginner_lessons` MODIFY COLUMN `category` enum('numbers','days','months','time','phrases','hello','family','food','languages','family_counting','age_counting') NOT NULL;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user H3xBc74v2DhXVFD.36b8a0bff9b4 --database Y7WwU9YEaDjQuukRocYtoN --execute ALTER TABLE `beginner_lessons` MODIFY COLUMN `category` enum('numbers','days','months','time','phrases','hello','family','food','languages','family_counting','age_counting') NOT NULL;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 409
+}

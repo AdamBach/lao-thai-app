@@ -1,0 +1,1 @@
+ALTER TABLE `beginner_lessons` MODIFY COLUMN `category` enum('numbers','days','months','time','phrases','hello','family','food','languages','family_counting','age_counting') NOT NULL;
