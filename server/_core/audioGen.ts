@@ -28,12 +28,36 @@ async function uploadToStorage(s3: S3Client, key: string, buffer: Buffer): Promi
   return `https://${bucket}.s3.${process.env.S3_REGION ?? "us-east-1"}.amazonaws.com/${key}`;
 }
 
+async function elevenLabsTTS(text: string, langCode: string): Promise<Buffer | null> {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) return null;
+  // Use multilingual v2 model which supports Thai and Lao
+  const voiceId = langCode === "th" ? "pNInz6obpgDQGcFmaJgB" : "pNInz6obpgDQGcFmaJgB"; // Adam voice, multilingual
+  try {
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text,
+        model_id: "eleven_multilingual_v2",
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+      }),
+    });
+    if (!response.ok) { console.warn(`  [ElevenLabs] Failed: ${response.status} ${await response.text()}`); return null; }
+    const buf = Buffer.from(await response.arrayBuffer());
+    return buf.byteLength > 100 ? buf : null;
+  } catch (err: any) { console.warn(`  [ElevenLabs] Error: ${err.message}`); return null; }
+}
+
 async function googleTranslateTTS(text: string, langCode: string): Promise<Buffer | null> {
   try {
-    const params = new URLSearchParams({ ie: "UTF-8", q: text, tl: langCode, client: "gtx", ttsspeed: "0.8" });
+    const params = new URLSearchParams({ ie: "UTF-8", q: text, tl: langCode, client: "tw-ob" });
     const response = await fetch(`https://translate.google.com/translate_tts?${params.toString()}`, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         Referer: "https://translate.google.com/",
       },
     });
@@ -129,12 +153,16 @@ export function registerAudioGenRoute(app: Express) {
 
           log(`  ⟳ Item ${idx} "${text}"...`);
 
+          const langCode = lesson.language === "thai" ? "th" : "lo";
           let audioBuffer: Buffer | null = null;
-          if (process.env.AZURE_TTS_KEY) {
-            audioBuffer = await azureTTS(text, lesson.language === "thai" ? "th" : "lo");
+          if (process.env.ELEVENLABS_API_KEY) {
+            audioBuffer = await elevenLabsTTS(text, langCode);
+          }
+          if (!audioBuffer && process.env.AZURE_TTS_KEY) {
+            audioBuffer = await azureTTS(text, langCode);
           }
           if (!audioBuffer) {
-            audioBuffer = await googleTranslateTTS(text, lesson.language === "thai" ? "th" : "lo");
+            audioBuffer = await googleTranslateTTS(text, langCode);
           }
 
           if (!audioBuffer) {
