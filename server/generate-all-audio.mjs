@@ -1,10 +1,7 @@
 #!/usr/bin/env node
 import "dotenv/config";
 import mysql from "mysql2/promise";
-import { drizzle } from "drizzle-orm/mysql2";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import { beginnerLessons, lessonAudio } from "../drizzle/schema.ts";
-import { eq, and } from "drizzle-orm";
 
 function createS3Client() {
   const accessKeyId = process.env.S3_ACCESS_KEY_ID;
@@ -32,7 +29,7 @@ async function googleTranslateTTS(text, langCode) {
     });
     if (!response.ok) { console.warn(`  [TTS] Google failed: ${response.status}`); return null; }
     const buf = Buffer.from(await response.arrayBuffer());
-    if (buf.byteLength < 100) { console.warn("  [TTS] Too small"); return null; }
+    if (buf.byteLength < 100) { console.warn("  [TTS] Response too small, skipping"); return null; }
     return buf;
   } catch (err) { console.warn("  [TTS] Google error:", err.message); return null; }
 }
@@ -55,7 +52,7 @@ async function azureTTS(text, langCode) {
     if (!response.ok) return null;
     const buf = Buffer.from(await response.arrayBuffer());
     return buf.byteLength > 0 ? buf : null;
-  } catch (err) { return null; }
+  } catch { return null; }
 }
 
 async function generateAudio(text, language) {
@@ -77,38 +74,66 @@ function getSpeakableText(item, language) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function generateAllAudio() {
-  console.log("\n Lao-Thai Learning App — Batch TTS Audio Generator\n");
+  console.log("\n🎵 Lao-Thai Learning App — Batch TTS Audio Generator\n");
+
   const connection = await mysql.createConnection(process.env.DATABASE_URL);
-  const db = drizzle(connection);
   const s3 = createS3Client();
   let generated = 0, skipped = 0, failed = 0;
+
   try {
-    const lessons = await db.select().from(beginnerLessons);
+    // Use raw SQL — no TypeScript/drizzle needed
+    const [lessons] = await connection.execute("SELECT id, language, title, content FROM beginner_lessons");
     console.log(`Found ${lessons.length} lessons\n`);
+
     for (const lesson of lessons) {
       console.log(`▶ [${lesson.language.toUpperCase()}] ${lesson.title}`);
+
       let items;
-      try { items = JSON.parse(lesson.content); } catch { console.error("  ✗ Could not parse content"); failed++; continue; }
+      try { items = JSON.parse(lesson.content); }
+      catch { console.error("  ✗ Could not parse content"); failed++; continue; }
+
       for (let idx = 0; idx < items.length; idx++) {
         const text = getSpeakableText(items[idx], lesson.language);
         if (!text) { skipped++; continue; }
-        const existing = await db.select().from(lessonAudio).where(and(eq(lessonAudio.lessonId, lesson.id), eq(lessonAudio.itemIndex, idx))).limit(1);
-        if (existing.length > 0 && existing[0].audioUrl) { console.log(`  ✓ Item ${idx} "${text}": cached`); skipped++; continue; }
+
+        // Check cache
+        const [existing] = await connection.execute(
+          "SELECT id, audioUrl FROM lesson_audio WHERE lessonId = ? AND itemIndex = ? LIMIT 1",
+          [lesson.id, idx]
+        );
+        if (existing.length > 0 && existing[0].audioUrl) {
+          console.log(`  ✓ Item ${idx} "${text}": cached`);
+          skipped++;
+          continue;
+        }
+
         console.log(`  ⟳ Item ${idx} "${text}"...`);
         const audioBuffer = await generateAudio(text, lesson.language);
-        if (!audioBuffer) { console.error(`  ✗ Item ${idx}: all TTS failed`); failed++; continue; }
+
+        if (!audioBuffer) {
+          console.error(`  ✗ Item ${idx}: all TTS providers failed`);
+          failed++;
+          continue;
+        }
+
         const fileKey = `audio/lessons/${lesson.id}/item-${idx}-${Date.now()}.mp3`;
         const audioUrl = await uploadToStorage(s3, fileKey, audioBuffer);
-        await db.insert(lessonAudio).values({ lessonId: lesson.id, itemIndex: idx, text, language: lesson.language, audioUrl });
+
+        await connection.execute(
+          "INSERT INTO lesson_audio (lessonId, itemIndex, text, language, audioUrl) VALUES (?, ?, ?, ?, ?)",
+          [lesson.id, idx, text, lesson.language, audioUrl]
+        );
+
         console.log(`  ✓ Item ${idx}: ${audioUrl}`);
         generated++;
         await sleep(600);
       }
     }
   } finally {
-    console.log(`\n Generated: ${generated} | Skipped: ${skipped} | Failed: ${failed}`);
+    console.log(`\n✅ Generated: ${generated} | Skipped (cached): ${skipped} | Failed: ${failed}`);
     await connection.end();
   }
+
   process.exit(failed > 0 ? 1 : 0);
 }
 
