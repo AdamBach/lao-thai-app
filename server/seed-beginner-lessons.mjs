@@ -12,8 +12,8 @@ const lessons = [
   {
     language: "lao",
     category: "numbers",
-    title: "라오어 숫자 0-10",
-    description: "라오어로 0부터 10까지 숫자를 배웁니다",
+    title: "Lao Numbers 0-10",
+    description: "Learn numbers 0 to 10 in Lao",
     content: JSON.stringify([
       { number: 0, lao: "ສູນ", romanization: "soon", thai: "ศูนย์" },
       { number: 1, lao: "ນຶ່ງ", romanization: "neung", thai: "หนึ่ง" },
@@ -34,8 +34,8 @@ const lessons = [
   {
     language: "thai",
     category: "numbers",
-    title: "태국어 숫자 0-10",
-    description: "태국어로 0부터 10까지 숫자를 배웁니다",
+    title: "Thai Numbers 0-10",
+    description: "Learn numbers 0 to 10 in Thai",
     content: JSON.stringify([
       { number: 0, thai: "ศูนย์", romanization: "soon", lao: "ສູນ" },
       { number: 1, thai: "หนึ่ง", romanization: "neung", lao: "ນຶ່ງ" },
@@ -56,8 +56,8 @@ const lessons = [
   {
     language: "lao",
     category: "days",
-    title: "라오어 요일",
-    description: "라오어로 요일을 배웁니다",
+    title: "Lao Days of the Week",
+    description: "Learn days of the week in Lao",
     content: JSON.stringify([
       { day: "Monday", lao: "ວັນຈັນ", romanization: "van chan", thai: "วันจันทร์" },
       { day: "Tuesday", lao: "ວັນອັງຄານ", romanization: "van angkhan", thai: "วันอังคาร" },
@@ -74,8 +74,8 @@ const lessons = [
   {
     language: "thai",
     category: "days",
-    title: "태국어 요일",
-    description: "태국어로 요일을 배웁니다",
+    title: "Thai Days of the Week",
+    description: "Learn days of the week in Thai",
     content: JSON.stringify([
       { day: "Monday", thai: "วันจันทร์", romanization: "wan chan", lao: "ວັນຈັນ" },
       { day: "Tuesday", thai: "วันอังคาร", romanization: "wan angkhan", lao: "ວັນອັງຄານ" },
@@ -92,8 +92,8 @@ const lessons = [
   {
     language: "lao",
     category: "months",
-    title: "라오어 월",
-    description: "라오어로 월을 배웁니다",
+    title: "Lao Months",
+    description: "Learn months of the year in Lao",
     content: JSON.stringify([
       { month: "January", lao: "ມັງກອນ", romanization: "mangkorn", thai: "มกราคม" },
       { month: "February", lao: "ກຸມພາ", romanization: "kumpha", thai: "กุมภาพันธ์" },
@@ -115,8 +115,8 @@ const lessons = [
   {
     language: "thai",
     category: "months",
-    title: "태국어 월",
-    description: "태국어로 월을 배웁니다",
+    title: "Thai Months",
+    description: "Learn months of the year in Thai",
     content: JSON.stringify([
       { month: "January", thai: "มกราคม", romanization: "mangkorn", lao: "ມັງກອນ" },
       { month: "February", thai: "กุมภาพันธ์", romanization: "kumpha", lao: "ກຸມພາ" },
@@ -138,8 +138,8 @@ const lessons = [
   {
     language: "lao",
     category: "time",
-    title: "라오어 시간 표현",
-    description: "라오어로 시간을 읽고 표현하는 방법을 배웁니다",
+    title: "Lao Time Expressions",
+    description: "Learn how to tell and express time in Lao",
     content: JSON.stringify([
       { time: "Morning", lao: "ເຊົ້າ", romanization: "chao", thai: "เช้า" },
       { time: "Afternoon", lao: "ບ່າຍ", romanization: "bai", thai: "บ่าย" },
@@ -155,8 +155,8 @@ const lessons = [
   {
     language: "thai",
     category: "time",
-    title: "태국어 시간 표현",
-    description: "태국어로 시간을 읽고 표현하는 방법을 배웁니다",
+    title: "Thai Time Expressions",
+    description: "Learn how to tell and express time in Thai",
     content: JSON.stringify([
       { time: "Morning", thai: "เช้า", romanization: "chao", lao: "ເຊົ້າ" },
       { time: "Afternoon", thai: "บ่าย", romanization: "bai", lao: "ບ່າຍ" },
@@ -172,8 +172,8 @@ const lessons = [
   {
     language: "lao",
     category: "phrases",
-    title: "라오어 기본 인사말",
-    description: "라오어로 기본 인사말과 표현을 배웁니다",
+    title: "Lao Basic Greetings",
+    description: "Learn basic greetings and expressions in Lao",
     content: JSON.stringify([
       { phrase: "Hello", lao: "ສະບາຍດີ", romanization: "sabai di", thai: "สวัสดี" },
       { phrase: "Hi", lao: "ຫາຍ", romanization: "hai", thai: "ไฮ" },
@@ -195,8 +195,8 @@ const lessons = [
   {
     language: "thai",
     category: "phrases",
-    title: "태국어 기본 인사말",
-    description: "태국어로 기본 인사말과 표현을 배웁니다",
+    title: "Thai Basic Greetings",
+    description: "Learn basic greetings and expressions in Thai",
     content: JSON.stringify([
       { phrase: "Hello", thai: "สวัสดี", romanization: "sabai di", lao: "ສະບາຍດີ" },
       { phrase: "Hi", thai: "ไฮ", romanization: "hai", lao: "ຫາຍ" },
