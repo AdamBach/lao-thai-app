@@ -15,6 +15,7 @@ import BeginnerLessons from "./pages/BeginnerLessons";
 import ReviewMode from "./pages/ReviewMode";
 import Test from "./pages/Test";
 import Statistics from "./pages/Statistics";
+import Login from "./pages/Login";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -35,6 +36,7 @@ function Router() {
       <Route path="/review" component={ReviewMode} />
       <Route path="/test" component={Test} />
       <Route path="/statistics" component={Statistics} />
+      <Route path="/login" component={Login} />
       <Route path="/404" component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
