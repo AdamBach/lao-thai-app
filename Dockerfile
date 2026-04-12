@@ -2,17 +2,14 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-RUN corepack enable
+COPY package.json package-lock.json ./
 
-COPY package.json pnpm-lock.yaml ./
-COPY patches/ ./patches/
-
-RUN pnpm install --frozen-lockfile
+RUN npm ci --legacy-peer-deps
 
 COPY . .
 
-RUN pnpm run build
+RUN npm run build
 
 EXPOSE 3000
 
-CMD ["pnpm", "run", "start"]
+CMD ["npm", "run", "start"]
