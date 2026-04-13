@@ -12,6 +12,7 @@ import Leaderboard from "./pages/Leaderboard";
 import Onboarding from "./pages/Onboarding";
 import ProfileDashboard from "./pages/ProfileDashboard";
 import BeginnerLessons from "./pages/BeginnerLessons";
+import LessonDetail from "./pages/LessonDetail";
 import ReviewMode from "./pages/ReviewMode";
 import Test from "./pages/Test";
 import Statistics from "./pages/Statistics";
@@ -32,6 +33,7 @@ function Router() {
       <Route path="/leaderboard" component={Leaderboard} />
       <Route path="/beginner-lessons" component={BeginnerLessons} />
       <Route path="/lessons" component={BeginnerLessons} />
+      <Route path="/lesson/:id" component={LessonDetail} />
       <Route path="/review-mode" component={ReviewMode} />
       <Route path="/review" component={ReviewMode} />
       <Route path="/test" component={Test} />
