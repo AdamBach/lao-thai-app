@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Loader2, Mic, Square, Play, Volume2 } from "lucide-react";
-import BackButton from "@/components/BackButton";
+"use client";
+import { useState, useRef } from "react";
+import { Loader2, Mic, Square, Play, Volume2, ChevronLeft } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
+import { useLocation } from "wouter";
+import BottomNav from "@/components/BottomNav";
 
 interface PitchPoint {
   time: number;
@@ -14,7 +14,8 @@ interface PitchPoint {
 
 export default function PronunciationPractice() {
   const { user } = useAuth();
-  const [language, setLanguage] = useState<"lao" | "thai">("lao");
+  const [, navigate] = useLocation();
+  const [language, setLanguage] = useState<"lao" | "thai">("thai");
   const [selectedExercise, setSelectedExercise] = useState<any>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordedAudioUrl, setRecordedAudioUrl] = useState<string>("");
@@ -30,14 +31,9 @@ export default function PronunciationPractice() {
   const recordingStartTimeRef = useRef<number>(0);
   const recordedBlobRef = useRef<Blob | null>(null);
 
-  // Fetch exercises
-  const exercisesQuery = trpc.pronunciation.getExercises.useQuery({
-    language,
-  });
-
+  const exercisesQuery = trpc.pronunciation.getExercises.useQuery({ language });
   const submitRecordingMutation = trpc.pronunciation.submitRecording.useMutation();
 
-  // Initialize audio context for pitch analysis
   const initializeAudioContext = async () => {
     if (!audioContextRef.current) {
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -45,385 +41,279 @@ export default function PronunciationPractice() {
     return audioContextRef.current;
   };
 
-  // Start recording
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-
       const audioContext = await initializeAudioContext();
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 2048;
       analyserRef.current = analyser;
       source.connect(analyser);
-
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
       recordingStartTimeRef.current = Date.now();
-
-      mediaRecorder.ondataavailable = (e) => {
-        chunksRef.current.push(e.data);
-      };
-
+      mediaRecorder.ondataavailable = (e) => chunksRef.current.push(e.data);
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
         recordedBlobRef.current = blob;
-        const url = URL.createObjectURL(blob);
-        setRecordedAudioUrl(url);
+        setRecordedAudioUrl(URL.createObjectURL(blob));
       };
-
       mediaRecorder.start();
       setIsRecording(true);
-
-      // Analyze pitch in real-time
       analyzePitch();
     } catch (error) {
-      console.error("Error accessing microphone:", error);
-      toast.error("마이크에 접근할 수 없습니다. 권한을 확인해주세요.");
+      toast.error("Cannot access microphone. Please check permissions.");
     }
   };
 
-  // Analyze pitch from audio stream
   const analyzePitch = () => {
-    if (!analyserRef.current || !isRecording) return;
-
+    if (!analyserRef.current) return;
     const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
     analyserRef.current.getByteFrequencyData(dataArray);
-
-    // Find peak frequency (simplified pitch detection)
-    let maxValue = 0;
-    let maxIndex = 0;
+    let maxValue = 0, maxIndex = 0;
     for (let i = 0; i < dataArray.length; i++) {
-      if (dataArray[i] > maxValue) {
-        maxValue = dataArray[i];
-        maxIndex = i;
-      }
+      if (dataArray[i] > maxValue) { maxValue = dataArray[i]; maxIndex = i; }
     }
-
     const nyquist = (audioContextRef.current?.sampleRate || 44100) / 2;
     const frequency = (maxIndex * nyquist) / analyserRef.current.frequencyBinCount;
-
-    setPitchVisualization((prev) => [
-      ...prev.slice(-99), // Keep last 100 points
-      {
-        time: Date.now() - recordingStartTimeRef.current,
-        frequency: Math.max(0, frequency),
-      },
+    setPitchVisualization(prev => [
+      ...prev.slice(-99),
+      { time: Date.now() - recordingStartTimeRef.current, frequency: Math.max(0, frequency) },
     ]);
-
     requestAnimationFrame(analyzePitch);
   };
 
-  // Stop recording
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-      }
+      streamRef.current?.getTracks().forEach(t => t.stop());
     }
   };
 
-  // Convert blob to base64
-  const blobToBase64 = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
+  const blobToBase64 = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as string);
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
-  };
 
-  // Submit recording for analysis
   const submitRecording = async () => {
     if (!recordedBlobRef.current || !selectedExercise || !user) {
-      toast.error("녹음 파일 또는 연습 항목이 없습니다.");
+      toast.error("No recording or exercise selected.");
       return;
     }
-
     setIsSubmitting(true);
     try {
-      // Convert blob to base64 for transmission
       const audioBase64 = await blobToBase64(recordedBlobRef.current);
-
       const duration = Date.now() - recordingStartTimeRef.current;
-
-      // Submit to backend for S3 upload and analysis
       const result = await submitRecordingMutation.mutateAsync({
         exerciseId: selectedExercise.id,
-        audioData: audioBase64, // Send base64 encoded audio
+        audioData: audioBase64,
         duration,
       });
-
       setFeedbackResult(result);
-      toast.success("발음 분석이 완료되었습니다!");
-
-      // Clean up blob URL
-      if (recordedAudioUrl) {
-        URL.revokeObjectURL(recordedAudioUrl);
-      }
+      toast.success("Analysis complete!");
+      if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
       setRecordedAudioUrl("");
       recordedBlobRef.current = null;
     } catch (error) {
-      console.error("Error submitting recording:", error);
-      toast.error("발음 분석 중 오류가 발생했습니다.");
+      toast.error("Error analyzing pronunciation.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Play reference audio
-  const playReferenceAudio = () => {
-    if (selectedExercise?.audioUrl) {
-      const audio = new Audio(selectedExercise.audioUrl);
-      audio.play();
-    }
-  };
-
-  // Play recorded audio
-  const playRecordedAudio = () => {
-    if (recordedAudioUrl) {
-      const audio = new Audio(recordedAudioUrl);
-      audio.play();
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
-          <BackButton />
-          <div className="flex-1">
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">발음 연습</h1>
-            <p className="text-lg text-gray-600">라오어와 태국어 발음을 완벽하게 마스터하세요</p>
-          </div>
+    <div className="min-h-screen bg-background pb-24">
+      {/* Header */}
+      <div className="px-5 pt-12 pb-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Pronunciation</h1>
+          <p className="text-white/40 text-sm mt-0.5">AI tone analysis & feedback</p>
         </div>
-
-        {/* Language Selection */}
-        <div className="flex gap-4 mb-8">
-          <Button
-            variant={language === "lao" ? "default" : "outline"}
-            onClick={() => {
-              setLanguage("lao");
-              setSelectedExercise(null);
-              setFeedbackResult(null);
-            }}
-            className="flex-1"
+        <div className="flex bg-card border border-white/8 rounded-xl overflow-hidden">
+          <button
+            onClick={() => { setLanguage("thai"); setSelectedExercise(null); setFeedbackResult(null); }}
+            className={`px-4 py-2 text-sm font-semibold transition-colors ${language === "thai" ? "bg-blue-500 text-white" : "text-white/40 hover:text-white/70"}`}
           >
-            라오어
-          </Button>
-          <Button
-            variant={language === "thai" ? "default" : "outline"}
-            onClick={() => {
-              setLanguage("thai");
-              setSelectedExercise(null);
-              setFeedbackResult(null);
-            }}
-            className="flex-1"
+            ไทย Thai
+          </button>
+          <button
+            onClick={() => { setLanguage("lao"); setSelectedExercise(null); setFeedbackResult(null); }}
+            className={`px-4 py-2 text-sm font-semibold transition-colors ${language === "lao" ? "bg-blue-500 text-white" : "text-white/40 hover:text-white/70"}`}
           >
-            태국어
-          </Button>
+            ລາວ Lao
+          </button>
         </div>
+      </div>
 
+      <div className="px-5">
         {/* Exercise Selection */}
-        {!selectedExercise && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-            {exercisesQuery.data?.map((exercise) => (
-              <Card
-                key={exercise.id}
-                className="p-6 cursor-pointer hover:shadow-lg transition-shadow"
-                onClick={() => setSelectedExercise(exercise)}
-              >
-                <div className="text-3xl font-bold text-indigo-600 mb-2">{exercise.word}</div>
-                <div className="text-gray-600 mb-2">{exercise.romanization}</div>
-                <div className="text-sm text-gray-500 mb-3">{exercise.englishTranslation}</div>
-                <div className="flex items-center gap-2 text-xs bg-indigo-50 px-3 py-1 rounded-full w-fit">
-                  <span className="font-semibold">{exercise.category}</span>
-                  <span className="text-indigo-600">•</span>
-                  <span>{exercise.difficulty}</span>
-                </div>
-              </Card>
-            ))}
-          </div>
+        {!selectedExercise && !feedbackResult && (
+          <>
+            <p className="text-white/40 text-xs uppercase tracking-wider mb-3 font-medium">Choose a word to practice</p>
+            {exercisesQuery.isLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {exercisesQuery.data?.map((exercise) => (
+                  <button
+                    key={exercise.id}
+                    onClick={() => { setSelectedExercise(exercise); setPitchVisualization([]); }}
+                    className="bg-card border border-white/8 rounded-2xl p-4 text-left hover:border-blue-500/40 hover:bg-blue-500/5 transition-all"
+                  >
+                    <div className="text-2xl font-bold text-blue-400 mb-1">{exercise.word}</div>
+                    <div className="text-white/50 text-xs mb-1">{exercise.romanization}</div>
+                    <div className="text-white/70 text-sm font-medium">{exercise.englishTranslation}</div>
+                    <div className="mt-2 inline-flex items-center gap-1 bg-blue-500/10 border border-blue-500/20 rounded-lg px-2 py-0.5">
+                      <span className="text-blue-400 text-xs font-semibold">{exercise.difficulty}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         {/* Recording Interface */}
-        {selectedExercise && (
-          <div className="space-y-6">
-            {/* Exercise Display */}
-            <Card className="p-8 bg-white shadow-lg">
-              <div className="text-center mb-6">
-                <div className="text-5xl font-bold text-indigo-600 mb-3">{selectedExercise.word}</div>
-                <div className="text-2xl text-gray-600 mb-4">{selectedExercise.romanization}</div>
-                <div className="text-lg text-gray-700 mb-6">{selectedExercise.englishTranslation}</div>
+        {selectedExercise && !feedbackResult && (
+          <div className="space-y-4">
+            {/* Back */}
+            <button
+              onClick={() => { setSelectedExercise(null); setPitchVisualization([]); setRecordedAudioUrl(""); recordedBlobRef.current = null; }}
+              className="flex items-center gap-1 text-white/40 hover:text-white/70 text-sm transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" /> Back to exercises
+            </button>
 
-                {/* Reference Audio Button */}
-                {selectedExercise.audioUrl && (
-                  <Button
-                    onClick={playReferenceAudio}
-                    variant="outline"
-                    className="gap-2"
-                  >
-                    <Volume2 className="w-4 h-4" />
-                    표준 발음 듣기
-                  </Button>
-                )}
-              </div>
-
-              {/* Tone Pattern Display */}
+            {/* Word display */}
+            <div className="bg-card border border-white/8 rounded-2xl p-6 text-center">
+              <div className="text-5xl font-bold text-blue-400 mb-2">{selectedExercise.word}</div>
+              <div className="text-white/50 text-lg mb-1">{selectedExercise.romanization}</div>
+              <div className="text-white font-semibold">{selectedExercise.englishTranslation}</div>
               {selectedExercise.tonePattern && (
-                <div className="bg-blue-50 p-4 rounded-lg mb-6">
-                  <p className="text-sm text-gray-600 mb-2">성조 패턴:</p>
-                  <p className="text-lg font-semibold text-indigo-600">{selectedExercise.tonePattern}</p>
+                <div className="mt-3 inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-1.5">
+                  <span className="text-white/40 text-xs">Tone pattern:</span>
+                  <span className="text-blue-400 text-sm font-semibold">{selectedExercise.tonePattern}</span>
                 </div>
               )}
-            </Card>
+              {selectedExercise.audioUrl && (
+                <button
+                  onClick={() => new Audio(selectedExercise.audioUrl).play()}
+                  className="mt-4 flex items-center gap-2 mx-auto bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white/60 hover:text-white hover:bg-white/10 transition-all text-sm"
+                >
+                  <Volume2 className="w-4 h-4" /> Listen to native audio
+                </button>
+              )}
+            </div>
 
-            {/* Recording Controls */}
-            <Card className="p-8 bg-white shadow-lg">
-              <div className="text-center space-y-4">
-                {!isRecording && !recordedAudioUrl && (
-                  <Button
-                    onClick={startRecording}
-                    size="lg"
-                    className="w-full gap-2 bg-red-500 hover:bg-red-600"
-                  >
-                    <Mic className="w-5 h-5" />
-                    녹음 시작
-                  </Button>
-                )}
-
-                {isRecording && (
-                  <>
-                    <div className="flex items-center justify-center gap-2 text-red-500 text-lg font-semibold">
-                      <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-                      녹음 중...
-                    </div>
-                    <Button
-                      onClick={stopRecording}
-                      size="lg"
-                      className="w-full gap-2 bg-gray-500 hover:bg-gray-600"
-                    >
-                      <Square className="w-5 h-5" />
-                      녹음 중지
-                    </Button>
-                  </>
-                )}
-
-                {recordedAudioUrl && (
-                  <>
-                    <div className="bg-green-50 p-4 rounded-lg">
-                      <p className="text-green-700 font-semibold mb-2">✓ 녹음 완료</p>
-                      <Button
-                        onClick={playRecordedAudio}
-                        variant="outline"
-                        className="w-full gap-2 mb-2"
-                      >
-                        <Play className="w-4 h-4" />
-                        내 녹음 재생
-                      </Button>
-                    </div>
-                    <Button
-                      onClick={submitRecording}
-                      disabled={isSubmitting}
-                      size="lg"
-                      className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700"
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          분석 중...
-                        </>
-                      ) : (
-                        "발음 분석 제출"
-                      )}
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        if (recordedAudioUrl) {
-                          URL.revokeObjectURL(recordedAudioUrl);
-                        }
-                        setRecordedAudioUrl("");
-                        recordedBlobRef.current = null;
-                        setPitchVisualization([]);
-                      }}
-                      variant="outline"
-                      className="w-full"
-                    >
-                      다시 녹음
-                    </Button>
-                  </>
-                )}
-              </div>
-            </Card>
-
-            {/* Pitch Visualization */}
+            {/* Pitch visualization */}
             {pitchVisualization.length > 0 && (
-              <Card className="p-6 bg-white shadow-lg">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">성조 시각화</h3>
-                <div className="h-48 bg-gradient-to-b from-blue-50 to-indigo-50 rounded-lg p-4 flex items-end gap-1">
+              <div className="bg-card border border-white/8 rounded-2xl p-4">
+                <p className="text-white/40 text-xs uppercase tracking-wider mb-3 font-medium">Tone visualization</p>
+                <div className="h-20 flex items-end gap-0.5 bg-blue-500/5 rounded-xl p-2">
                   {pitchVisualization.map((point, idx) => (
                     <div
                       key={idx}
-                      className="flex-1 bg-indigo-600 rounded-t opacity-70 hover:opacity-100 transition-opacity"
-                      style={{
-                        height: `${Math.min(100, (point.frequency / 1000) * 100)}%`,
-                      }}
-                      title={`${point.frequency.toFixed(0)} Hz`}
+                      className="flex-1 bg-blue-500 rounded-t opacity-70"
+                      style={{ height: `${Math.min(100, (point.frequency / 800) * 100)}%`, minHeight: 2 }}
                     />
                   ))}
                 </div>
-              </Card>
+              </div>
             )}
 
-            {/* Feedback Results */}
-            {feedbackResult && (
-              <Card className="p-6 bg-white shadow-lg border-2 border-green-200">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">분석 결과</h3>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm text-gray-600">정확도 점수</p>
-                    <div className="flex items-center gap-3 mt-2">
-                      <div className="flex-1 bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-green-500 h-2 rounded-full transition-all"
-                          style={{ width: `${feedbackResult.accuracy}%` }}
-                        />
-                      </div>
-                      <span className="text-2xl font-bold text-green-600">{feedbackResult.accuracy}%</span>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600 mb-2">피드백</p>
-                    <p className="text-gray-900">{feedbackResult.feedback}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600 mb-2">녹음 URL</p>
-                    <p className="text-xs text-indigo-600 break-all font-mono bg-indigo-50 p-2 rounded">
-                      {feedbackResult.audioUrl}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  onClick={() => {
-                    setSelectedExercise(null);
-                    setFeedbackResult(null);
-                    setPitchVisualization([]);
-                  }}
-                  className="w-full mt-4"
+            {/* Recording controls */}
+            <div className="bg-card border border-white/8 rounded-2xl p-5 space-y-3">
+              {!isRecording && !recordedAudioUrl && (
+                <button
+                  onClick={startRecording}
+                  className="w-full py-4 rounded-xl bg-blue-500 text-white font-bold flex items-center justify-center gap-2 hover:bg-blue-400 transition-all blue-glow"
                 >
-                  다른 단어 연습
-                </Button>
-              </Card>
-            )}
+                  <Mic className="w-5 h-5" /> Start Recording
+                </button>
+              )}
+              {isRecording && (
+                <>
+                  <div className="flex items-center justify-center gap-2 text-red-400 font-semibold">
+                    <div className="w-2.5 h-2.5 bg-red-400 rounded-full animate-pulse" />
+                    Recording...
+                  </div>
+                  <button
+                    onClick={stopRecording}
+                    className="w-full py-4 rounded-xl bg-white/10 border border-white/10 text-white font-bold flex items-center justify-center gap-2 hover:bg-white/15 transition-all"
+                  >
+                    <Square className="w-5 h-5" /> Stop Recording
+                  </button>
+                </>
+              )}
+              {recordedAudioUrl && (
+                <>
+                  <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3">
+                    <span className="text-blue-400 font-semibold text-sm">✓ Recording ready</span>
+                  </div>
+                  <button
+                    onClick={() => new Audio(recordedAudioUrl).play()}
+                    className="w-full py-3 rounded-xl bg-white/5 border border-white/10 text-white/70 font-medium flex items-center justify-center gap-2 hover:bg-white/10 transition-all"
+                  >
+                    <Play className="w-4 h-4" /> Play my recording
+                  </button>
+                  <button
+                    onClick={submitRecording}
+                    disabled={isSubmitting}
+                    className="w-full py-4 rounded-xl bg-blue-500 text-white font-bold flex items-center justify-center gap-2 hover:bg-blue-400 transition-all blue-glow disabled:opacity-50"
+                  >
+                    {isSubmitting ? <><Loader2 className="w-5 h-5 animate-spin" /> Analyzing...</> : "Analyze Pronunciation"}
+                  </button>
+                  <button
+                    onClick={() => { if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl); setRecordedAudioUrl(""); recordedBlobRef.current = null; setPitchVisualization([]); }}
+                    className="w-full py-3 rounded-xl bg-white/5 border border-white/10 text-white/50 font-medium hover:bg-white/10 transition-all"
+                  >
+                    Record again
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Feedback Results */}
+        {feedbackResult && (
+          <div className="space-y-4">
+            <div className="bg-card border border-white/8 rounded-2xl p-6">
+              <p className="text-white/40 text-xs uppercase tracking-wider mb-4 font-medium">Analysis Result</p>
+              <div className="mb-5">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-white/60 text-sm">Accuracy</span>
+                  <span className="text-2xl font-bold text-blue-400">{feedbackResult.accuracy}%</span>
+                </div>
+                <div className="h-2 bg-white/8 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${feedbackResult.accuracy}%` }} />
+                </div>
+              </div>
+              <div>
+                <p className="text-white/40 text-sm mb-1">Feedback</p>
+                <p className="text-white">{feedbackResult.feedback}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => { setSelectedExercise(null); setFeedbackResult(null); setPitchVisualization([]); }}
+              className="w-full py-4 rounded-2xl bg-blue-500 text-white font-bold flex items-center justify-center gap-2 hover:bg-blue-400 transition-all blue-glow"
+            >
+              Practice another word
+            </button>
           </div>
         )}
       </div>
+
+      <BottomNav />
     </div>
   );
 }

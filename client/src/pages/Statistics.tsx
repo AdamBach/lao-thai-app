@@ -1,182 +1,144 @@
+"use client";
 import { useMemo } from "react";
 import { trpc } from "@/lib/trpc";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, TrendingUp, Target, Clock, Zap } from "lucide-react";
+import { TrendingUp, Target, Clock, Zap, BookOpen } from "lucide-react";
 import { useLocation } from "wouter";
-import BackButton from "@/components/BackButton";
+import BottomNav from "@/components/BottomNav";
 
 type Category = "numbers" | "days" | "months" | "time" | "phrases";
 
+const categories: Array<{ value: Category; label: string; icon: string }> = [
+  { value: "numbers", label: "Numbers", icon: "🔢" },
+  { value: "days", label: "Days of the week", icon: "📅" },
+  { value: "months", label: "Months", icon: "🗓️" },
+  { value: "time", label: "Time", icon: "⏰" },
+  { value: "phrases", label: "Basic phrases", icon: "💬" },
+];
+
 export default function Statistics() {
   const [, navigate] = useLocation();
-
-  // Fetch user's review statistics
   const { data: stats, isLoading } = trpc.review.getStats.useQuery({});
 
-  // Calculate overall statistics
-  const overallStats = useMemo(() => {
-    if (!stats) {
-      return {
-        totalReviews: 0,
-        totalCorrect: 0,
-        overallAccuracy: 0,
-        totalTimeSpent: 0,
-        streak: 0,
-      };
-    }
-
-    const totalReviews = stats.totalSessions || 0;
-    const totalCorrect = stats.totalCorrect || 0;
-    const overallAccuracy = stats.averageAccuracy || 0;
-    const totalTimeSpent = (totalReviews * 300) || 0; // Estimate 5 mins per session
-    const streak = 0;
-
+  const overall = useMemo(() => {
+    if (!stats) return { totalReviews: 0, totalCorrect: 0, overallAccuracy: 0, totalTimeSpent: 0, streak: 0 };
     return {
-      totalReviews,
-      totalCorrect,
-      overallAccuracy,
-      totalTimeSpent,
-      streak,
+      totalReviews: stats.totalSessions || 0,
+      totalCorrect: stats.totalCorrect || 0,
+      overallAccuracy: stats.averageAccuracy || 0,
+      totalTimeSpent: (stats.totalSessions || 0) * 300,
+      streak: 0,
     };
   }, [stats]);
 
-  // Category data
-  const categories: Array<{ value: Category; label: string }> = [
-    { value: "numbers", label: "숫자" },
-    { value: "days", label: "요일" },
-    { value: "months", label: "월" },
-    { value: "time", label: "시간" },
-    { value: "phrases", label: "기본 인사말" },
-  ];
-
   const formatTime = (seconds: number) => {
-    if (seconds < 60) return `${seconds}초`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}분`;
-    return `${Math.floor(seconds / 3600)}시간`;
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+    return `${Math.floor(seconds / 3600)}h`;
   };
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 flex items-center justify-center">
-        <div className="text-slate-600">통계를 불러오는 중...</div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-white/40">Loading statistics...</div>
       </div>
     );
   }
 
-  const itemsPerCategory = Math.ceil((stats?.totalItems || 0) / categories.length);
-  const completedPerCategory = Math.floor((stats?.totalCorrect || 0) / categories.length);
+  const itemsPerCat = Math.ceil((stats?.totalItems || 0) / categories.length);
+  const donePerCat = Math.floor((stats?.totalCorrect || 0) / categories.length);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-      <div className="max-w-4xl mx-auto">
-        <BackButton />
+    <div className="min-h-screen bg-background pb-24">
+      {/* Header */}
+      <div className="px-5 pt-12 pb-4">
+        <h1 className="text-2xl font-bold text-white">Statistics</h1>
+        <p className="text-white/40 text-sm mt-0.5">Your learning progress at a glance</p>
+      </div>
 
-        <div className="mt-8 mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">학습 통계</h1>
-          <p className="text-slate-600">당신의 학습 진행 상황을 확인하세요</p>
+      {/* Overall stats */}
+      <div className="px-5 mb-5 grid grid-cols-2 gap-3">
+        <div className="bg-card border border-white/8 rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-white/40 text-xs">Reviews</span>
+            <TrendingUp className="w-4 h-4 text-blue-400/50" />
+          </div>
+          <div className="text-2xl font-bold text-white">{overall.totalReviews}</div>
         </div>
-
-        {/* Overall Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <Card className="p-6 bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-600 mb-1">복습 횟수</p>
-                <p className="text-3xl font-bold text-slate-900">{overallStats.totalReviews}</p>
-              </div>
-              <TrendingUp className="w-8 h-8 text-blue-600 opacity-50" />
-            </div>
-          </Card>
-
-          <Card className="p-6 bg-gradient-to-br from-green-50 to-green-100 border-green-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-600 mb-1">정답률</p>
-                <p className="text-3xl font-bold text-slate-900">
-                  {overallStats.overallAccuracy.toFixed(1)}%
-                </p>
-              </div>
-              <Target className="w-8 h-8 text-green-600 opacity-50" />
-            </div>
-          </Card>
-
-          <Card className="p-6 bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-600 mb-1">학습 시간</p>
-                <p className="text-3xl font-bold text-slate-900">
-                  {formatTime(overallStats.totalTimeSpent)}
-                </p>
-              </div>
-              <Clock className="w-8 h-8 text-purple-600 opacity-50" />
-            </div>
-          </Card>
-
-          <Card className="p-6 bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-600 mb-1">연속 학습</p>
-                <p className="text-3xl font-bold text-slate-900">{overallStats.streak}일</p>
-              </div>
-              <Zap className="w-8 h-8 text-orange-600 opacity-50" />
-            </div>
-          </Card>
+        <div className="bg-card border border-white/8 rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-white/40 text-xs">Accuracy</span>
+            <Target className="w-4 h-4 text-green-400/50" />
+          </div>
+          <div className="text-2xl font-bold text-white">{overall.overallAccuracy.toFixed(1)}%</div>
         </div>
+        <div className="bg-card border border-white/8 rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-white/40 text-xs">Study time</span>
+            <Clock className="w-4 h-4 text-purple-400/50" />
+          </div>
+          <div className="text-2xl font-bold text-white">{formatTime(overall.totalTimeSpent)}</div>
+        </div>
+        <div className="bg-card border border-white/8 rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-white/40 text-xs">Day streak</span>
+            <Zap className="w-4 h-4 text-orange-400/50" />
+          </div>
+          <div className="text-2xl font-bold text-white">{overall.streak} 🔥</div>
+        </div>
+      </div>
 
-        {/* Category Statistics */}
-        <div className="space-y-4 mb-8">
-          <h2 className="text-2xl font-bold text-slate-900">카테고리별 진행도</h2>
-
+      {/* Category progress */}
+      <div className="px-5 mb-5">
+        <p className="text-white/40 text-xs uppercase tracking-wider mb-3 font-medium">Category Progress</p>
+        <div className="space-y-3">
           {categories.map((cat) => {
-            const progress = itemsPerCategory > 0 ? (completedPerCategory / itemsPerCategory) * 100 : 0;
-            const accuracyColor =
-              overallStats.overallAccuracy >= 80
-                ? "text-green-600"
-                : overallStats.overallAccuracy >= 60
-                  ? "text-blue-600"
-                  : "text-orange-600";
+            const pct = itemsPerCat > 0 ? (donePerCat / itemsPerCat) * 100 : 0;
+            const accColor = overall.overallAccuracy >= 80 ? "text-green-400"
+              : overall.overallAccuracy >= 60 ? "text-blue-400" : "text-orange-400";
 
             return (
-              <Card key={cat.value} className="p-6 hover:shadow-lg transition-shadow">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-900">{cat.label}</h3>
-                    <p className="text-sm text-slate-600">
-                      {completedPerCategory}/{itemsPerCategory} 완료 • 정답률{" "}
-                      {overallStats.overallAccuracy.toFixed(1)}%
-                    </p>
+              <div key={cat.value} className="bg-card border border-white/8 rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{cat.icon}</span>
+                    <div>
+                      <div className="text-white font-semibold text-sm">{cat.label}</div>
+                      <div className="text-white/30 text-xs">{donePerCat}/{itemsPerCat} done</div>
+                    </div>
                   </div>
                   <div className="text-right">
-                    <p className={`text-2xl font-bold ${accuracyColor}`}>
-                      {overallStats.overallAccuracy.toFixed(0)}%
-                    </p>
-                    <p className="text-xs text-slate-600">
-                      {formatTime(Math.floor(overallStats.totalTimeSpent / categories.length))}
-                    </p>
+                    <div className={`text-lg font-bold ${accColor}`}>
+                      {overall.overallAccuracy.toFixed(0)}%
+                    </div>
+                    <div className="text-white/30 text-xs">{formatTime(Math.floor(overall.totalTimeSpent / categories.length))}</div>
                   </div>
                 </div>
-
-                <Progress value={progress} className="h-2 mb-2" />
-
-                <p className="text-xs text-slate-500">마지막 복습: 오늘</p>
-              </Card>
+                <div className="h-1.5 bg-white/8 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
             );
           })}
         </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-3 justify-center">
-          <Button variant="outline" onClick={() => navigate("/beginner-lessons")}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            초보자 학습으로
-          </Button>
-          <Button onClick={() => navigate("/review-mode")}>
-            복습 계속하기
-          </Button>
-        </div>
       </div>
+
+      {/* Action buttons */}
+      <div className="px-5 flex gap-3">
+        <button
+          onClick={() => navigate("/lessons")}
+          className="flex-1 py-3 rounded-xl bg-white/5 border border-white/10 text-white/60 font-medium flex items-center justify-center gap-2 hover:bg-white/10 transition-all"
+        >
+          <BookOpen className="w-4 h-4" /> Back to Lessons
+        </button>
+        <button
+          onClick={() => navigate("/review")}
+          className="flex-1 py-3 rounded-xl bg-blue-500 text-white font-bold flex items-center justify-center gap-2 hover:bg-blue-400 transition-all blue-glow"
+        >
+          Continue Review
+        </button>
+      </div>
+
+      <BottomNav />
     </div>
   );
 }

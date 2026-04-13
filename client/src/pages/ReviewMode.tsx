@@ -1,12 +1,10 @@
+"use client";
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, RotateCcw, CheckCircle2, XCircle, Mic, Volume2, AlertCircle } from "lucide-react";
+import { RotateCcw, CheckCircle2, XCircle, Mic, AlertCircle, ChevronLeft } from "lucide-react";
 import { useLocation } from "wouter";
-import BackButton from "@/components/BackButton";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
+import BottomNav from "@/components/BottomNav";
 
 interface ReviewItem {
   thai?: string;
@@ -29,76 +27,61 @@ interface PronunciationScore {
   isCorrect: boolean;
 }
 
+const categoryList: { value: Category; label: string; icon: string }[] = [
+  { value: "hello", label: "Greetings", icon: "👋" },
+  { value: "family", label: "Family", icon: "👨‍👩‍👧" },
+  { value: "food", label: "Food", icon: "🍜" },
+  { value: "languages", label: "Languages", icon: "💬" },
+  { value: "family_counting", label: "Family & Numbers", icon: "🔢" },
+  { value: "age_counting", label: "Age & Numbers", icon: "🎂" },
+];
+
 export default function ReviewMode() {
-  const [, setLocation] = useLocation();
+  const [, navigate] = useLocation();
   const [language, setLanguage] = useState<Language>("thai");
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [correctAnswers, setCorrectAnswers] = useState(0);
-  const [isAnswered, setIsAnswered] = useState(false);
-  const [startTime, setStartTime] = useState<number>(Date.now());
   const [isCompleted, setIsCompleted] = useState(false);
+  const [startTime] = useState<number>(Date.now());
   const [pronunciationScores, setPronunciationScores] = useState<PronunciationScore[]>([]);
-  const [showPronunciationMode, setShowPronunciationMode] = useState(false);
+  const [showMicMode, setShowMicMode] = useState(false);
   const [isScoring, setIsScoring] = useState(false);
 
   const { isRecording, startRecording, stopRecording, recordingTime } = useAudioRecorder();
   const scorePronunciationMutation = trpc.pronunciationScoring.scorePronunciation.useMutation();
 
-  // Fetch lessons by category
   const { data: categoryLessons } = trpc.beginnerLessons.getLessonsByCategory.useQuery(
-    {
-      language,
-      category: (selectedCategory as any) || "hello",
-    },
+    { language, category: (selectedCategory as any) || "hello" },
     { enabled: !!selectedCategory }
   );
 
   const startSessionMutation = trpc.review.startSession.useMutation();
   const completeSessionMutation = trpc.review.completeSession.useMutation();
 
-  // Load vocabulary items when category is selected
   useEffect(() => {
     if (categoryLessons && categoryLessons.length > 0) {
       const lesson = categoryLessons[0];
       const items = lesson.content ? JSON.parse(lesson.content as any) : [];
-      setReviewItems(items as ReviewItem[]);
+      setReviewItems(items);
       setCurrentIndex(0);
       setCorrectAnswers(0);
-      setIsAnswered(false);
-      setStartTime(Date.now());
       setPronunciationScores([]);
-
-      // Start review session
       if (lesson.id) {
         startSessionMutation.mutate(
           { lessonId: lesson.id, totalItems: items.length },
-          {
-            onSuccess: (session) => {
-              setSessionId((session as any)?.id || null);
-            },
-          }
+          { onSuccess: (session) => setSessionId((session as any)?.id || null) }
         );
       }
     }
   }, [categoryLessons, selectedCategory]);
 
-  const handleCorrect = () => {
-    setCorrectAnswers(correctAnswers + 1);
-    handleNext();
-  };
-
-  const handleIncorrect = () => {
-    handleNext();
-  };
-
   const handleNext = () => {
     if (currentIndex < reviewItems.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-      setIsAnswered(false);
-      setShowPronunciationMode(false);
+      setCurrentIndex(i => i + 1);
+      setShowMicMode(false);
     } else {
       completeReview();
     }
@@ -110,33 +93,21 @@ export default function ReviewMode() {
       if (audioBlob) {
         setIsScoring(true);
         const targetWord = currentItem?.thai || currentItem?.lao || currentItem?.english || "";
-        
         scorePronunciationMutation.mutate(
-          {
-            audioUrl: URL.createObjectURL(audioBlob),
-            expectedText: targetWord,
-            language,
-          },
+          { audioUrl: URL.createObjectURL(audioBlob), expectedText: targetWord, language },
           {
             onSuccess: (result) => {
               const score: PronunciationScore = {
                 accuracy: result.accuracy || 0,
-                feedback: result.feedback || "발음을 다시 시도해주세요.",
+                feedback: result.feedback || "Try again.",
                 isCorrect: (result.accuracy || 0) >= 70,
               };
-              setPronunciationScores([...pronunciationScores, score]);
-              
-              if (score.isCorrect) {
-                setCorrectAnswers(correctAnswers + 1);
-              }
-              
+              setPronunciationScores(prev => [...prev, score]);
+              if (score.isCorrect) setCorrectAnswers(c => c + 1);
               setIsScoring(false);
-              setTimeout(() => handleNext(), 2000);
+              setTimeout(handleNext, 2000);
             },
-            onError: () => {
-              setIsScoring(false);
-              alert("발음 채점에 실패했습니다. 다시 시도해주세요.");
-            },
+            onError: () => { setIsScoring(false); alert("Scoring failed. Please try again."); },
           }
         );
       }
@@ -146,292 +117,245 @@ export default function ReviewMode() {
   };
 
   const completeReview = async () => {
-    if (!sessionId) return;
-
-    const duration = Math.floor((Date.now() - startTime) / 1000);
-
+    if (!sessionId) { setIsCompleted(true); return; }
     completeSessionMutation.mutate(
-      {
-        sessionId,
-        correctAnswers,
-        totalItems: reviewItems.length,
-        duration,
-      },
-      {
-        onSuccess: () => {
-          setIsCompleted(true);
-        },
-      }
+      { sessionId, correctAnswers, totalItems: reviewItems.length, duration: Math.floor((Date.now() - startTime) / 1000) },
+      { onSuccess: () => setIsCompleted(true) }
     );
   };
 
   const currentItem = reviewItems[currentIndex];
   const progress = reviewItems.length > 0 ? ((currentIndex + 1) / reviewItems.length) * 100 : 0;
   const accuracy = reviewItems.length > 0 ? (correctAnswers / reviewItems.length) * 100 : 0;
-
-  const categories: { value: Category; label: string }[] = [
-    { value: "hello", label: "인사말" },
-    { value: "family", label: "가족" },
-    { value: "food", label: "음식" },
-    { value: "languages", label: "언어" },
-    { value: "family_counting", label: "가족 & 수" },
-    { value: "age_counting", label: "나이 & 수" },
-  ];
-
-  if (isCompleted) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-        <div className="max-w-2xl mx-auto">
-          <BackButton />
-
-          <div className="mt-8 text-center">
-            <div className="inline-flex items-center justify-center w-24 h-24 bg-green-100 rounded-full mb-6">
-              <CheckCircle2 className="w-12 h-12 text-green-600" />
-            </div>
-
-            <h1 className="text-4xl font-bold text-slate-900 mb-4">복습 완료!</h1>
-
-            <Card className="p-8 mb-6">
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <p className="text-sm text-slate-600 mb-2">정답률</p>
-                  <p className="text-3xl font-bold text-slate-900">{accuracy.toFixed(1)}%</p>
-                </div>
-                <div>
-                  <p className="text-sm text-slate-600 mb-2">정답</p>
-                  <p className="text-3xl font-bold text-green-600">
-                    {correctAnswers}/{reviewItems.length}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-slate-600 mb-2">소요 시간</p>
-                  <p className="text-3xl font-bold text-slate-900">
-                    {Math.floor((Date.now() - startTime) / 1000)}초
-                  </p>
-                </div>
-              </div>
-            </Card>
-
-            <div className="flex gap-3 justify-center flex-wrap">
-              <Button variant="outline" onClick={() => setLocation("/beginner-lessons")}>
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                돌아가기
-              </Button>
-              <Button
-                onClick={() => {
-                  setCurrentIndex(0);
-                  setCorrectAnswers(0);
-                  setIsAnswered(false);
-                  setIsCompleted(false);
-                  setStartTime(Date.now());
-                  setPronunciationScores([]);
-                  setShowPronunciationMode(false);
-                }}
-              >
-                <RotateCcw className="w-4 h-4 mr-2" />
-                다시 풀기
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!selectedCategory) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-        <div className="max-w-2xl mx-auto">
-          <BackButton />
-
-          <div className="mt-8">
-            <h1 className="text-3xl font-bold text-slate-900 mb-6">복습할 카테고리 선택</h1>
-
-            <div className="space-y-4">
-              {categories.map((cat) => (
-                <Card
-                  key={cat.value}
-                  className="p-4 cursor-pointer hover:shadow-lg transition-shadow"
-                  onClick={() => setSelectedCategory(cat.value)}
-                >
-                  <h3 className="text-lg font-semibold text-slate-900">{cat.label}</h3>
-                  <p className="text-sm text-slate-600">이 카테고리의 단어를 복습하세요</p>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!currentItem) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-slate-600 mb-4">복습할 단어가 없습니다.</p>
-          <Button onClick={() => setLocation("/beginner-lessons")}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            돌아가기
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   const currentScore = pronunciationScores[currentIndex];
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-      <div className="max-w-2xl mx-auto">
-        <BackButton />
-
-        {/* Progress */}
-        <div className="mt-8 mb-6">
-          <div className="flex justify-between items-center mb-2">
-            <h2 className="text-sm font-semibold text-slate-700">
-              진행률: {currentIndex + 1}/{reviewItems.length}
-            </h2>
-            <p className="text-sm font-semibold text-slate-700">정답: {correctAnswers}</p>
+  // Completed screen
+  if (isCompleted) {
+    return (
+      <div className="min-h-screen bg-background pb-24">
+        <div className="px-5 pt-12 flex flex-col items-center text-center">
+          <div className="w-20 h-20 bg-blue-500/20 border border-blue-500/30 rounded-full flex items-center justify-center mb-5 blue-glow">
+            <CheckCircle2 className="w-10 h-10 text-blue-400" />
           </div>
-          <Progress value={progress} className="h-2" />
-        </div>
+          <h1 className="text-3xl font-bold text-white mb-2">Review Complete!</h1>
+          <p className="text-white/40 mb-8">Great work on your practice session.</p>
 
-        {/* Question Card */}
-        <Card className="p-8 mb-6 text-center">
-          <p className="text-sm text-slate-600 mb-4">이 단어를 발음해보세요</p>
-          <h1 className="text-5xl font-bold text-slate-900 mb-4">
-            {currentItem.thai || currentItem.lao}
-          </h1>
-          {(currentItem.romanization || currentItem.number) && (
-            <p className="text-lg text-slate-600">
-              {currentItem.romanization || `숫자: ${currentItem.number}`}
-            </p>
+          <div className="w-full max-w-sm bg-card border border-white/8 rounded-2xl p-5 grid grid-cols-3 gap-4 text-center mb-6">
+            <div>
+              <div className="text-2xl font-bold text-white">{accuracy.toFixed(0)}%</div>
+              <div className="text-white/40 text-xs mt-0.5">Accuracy</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-green-400">{correctAnswers}/{reviewItems.length}</div>
+              <div className="text-white/40 text-xs mt-0.5">Correct</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-white">{Math.floor((Date.now() - startTime) / 1000)}s</div>
+              <div className="text-white/40 text-xs mt-0.5">Time</div>
+            </div>
+          </div>
+
+          <div className="flex gap-3 w-full max-w-sm">
+            <button
+              onClick={() => navigate("/lessons")}
+              className="flex-1 py-3 rounded-xl bg-white/5 border border-white/10 text-white/60 font-medium hover:bg-white/10 transition-all"
+            >
+              <ChevronLeft className="w-4 h-4 inline mr-1" /> Lessons
+            </button>
+            <button
+              onClick={() => { setCurrentIndex(0); setCorrectAnswers(0); setIsCompleted(false); setPronunciationScores([]); setShowMicMode(false); }}
+              className="flex-1 py-3 rounded-xl bg-blue-500 text-white font-bold flex items-center justify-center gap-2 hover:bg-blue-400 transition-all blue-glow"
+            >
+              <RotateCcw className="w-4 h-4" /> Try Again
+            </button>
+          </div>
+        </div>
+        <BottomNav />
+      </div>
+    );
+  }
+
+  // Category selection
+  if (!selectedCategory) {
+    return (
+      <div className="min-h-screen bg-background pb-24">
+        <div className="px-5 pt-12 pb-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Review</h1>
+            <p className="text-white/40 text-sm mt-0.5">Pick a category to review</p>
+          </div>
+          {/* Language toggle */}
+          <div className="flex bg-card border border-white/8 rounded-xl overflow-hidden">
+            <button
+              onClick={() => setLanguage("thai")}
+              className={`px-3 py-2 text-xs font-semibold transition-colors ${language === "thai" ? "bg-blue-500 text-white" : "text-white/40 hover:text-white/70"}`}
+            >
+              ไทย
+            </button>
+            <button
+              onClick={() => setLanguage("lao")}
+              className={`px-3 py-2 text-xs font-semibold transition-colors ${language === "lao" ? "bg-blue-500 text-white" : "text-white/40 hover:text-white/70"}`}
+            >
+              ລາວ
+            </button>
+          </div>
+        </div>
+        <div className="px-5 grid grid-cols-2 gap-3">
+          {categoryList.map((cat) => (
+            <button
+              key={cat.value}
+              onClick={() => setSelectedCategory(cat.value)}
+              className="bg-card border border-white/8 rounded-2xl p-5 text-left hover:border-blue-500/40 hover:bg-blue-500/5 transition-all"
+            >
+              <div className="text-3xl mb-2">{cat.icon}</div>
+              <div className="text-white font-semibold text-sm">{cat.label}</div>
+              <div className="text-white/30 text-xs mt-0.5">Tap to review</div>
+            </button>
+          ))}
+        </div>
+        <BottomNav />
+      </div>
+    );
+  }
+
+  // No items fallback
+  if (!currentItem) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-5 pb-24">
+        <div className="text-center">
+          <p className="text-white/40 mb-4">No items to review in this category.</p>
+          <button onClick={() => setSelectedCategory(null)} className="py-3 px-6 rounded-xl bg-blue-500 text-white font-bold hover:bg-blue-400 transition-all">
+            Choose Another
+          </button>
+        </div>
+        <BottomNav />
+      </div>
+    );
+  }
+
+  // Review card
+  return (
+    <div className="min-h-screen bg-background pb-24">
+      {/* Header */}
+      <div className="px-5 pt-12 pb-4 flex items-center gap-3">
+        <button
+          onClick={() => setSelectedCategory(null)}
+          className="flex items-center gap-1 text-white/40 hover:text-white/70 text-sm transition-colors"
+        >
+          <ChevronLeft className="w-4 h-4" /> Categories
+        </button>
+      </div>
+
+      {/* Progress bar */}
+      <div className="px-5 mb-5">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-white/40 text-sm">{currentIndex + 1} / {reviewItems.length}</span>
+          <span className="text-green-400 text-sm font-semibold">{correctAnswers} correct</span>
+        </div>
+        <div className="h-1.5 bg-white/8 rounded-full overflow-hidden">
+          <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
+        </div>
+      </div>
+
+      {/* Word card */}
+      <div className="px-5 mb-4">
+        <div className="bg-card border border-white/8 rounded-2xl p-8 text-center">
+          <p className="text-white/30 text-sm mb-3">Pronounce this word</p>
+          <div className="text-5xl font-bold text-white mb-3">
+            {language === "thai" ? (currentItem.thai || currentItem.lao) : (currentItem.lao || currentItem.thai)}
+          </div>
+          {currentItem.romanization && (
+            <div className="text-white/50 text-lg mb-1">{currentItem.romanization}</div>
           )}
           {currentItem.english && (
-            <p className="text-lg text-blue-600 font-semibold mt-2">
-              의미: {currentItem.english}
-            </p>
+            <div className="text-blue-400 font-semibold mt-2">{currentItem.english}</div>
           )}
-        </Card>
+        </div>
+      </div>
 
-        {/* Pronunciation Recording Mode */}
-        {showPronunciationMode ? (
-          <Card className="p-8 mb-6">
-            <div className="text-center space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">발음 녹음</h3>
-                <p className="text-sm text-slate-600 mb-4">
-                  마이크 버튼을 눌러 발음을 녹음하세요
+      {/* Mic mode */}
+      {showMicMode ? (
+        <div className="px-5 space-y-3">
+          <div className="bg-card border border-white/8 rounded-2xl p-5 text-center space-y-4">
+            <p className="text-white/60 text-sm">Tap the mic to record your pronunciation</p>
+
+            {isRecording && (
+              <div className="flex items-center justify-center gap-2 bg-red-400/10 border border-red-400/20 rounded-xl px-4 py-3">
+                <div className="w-2.5 h-2.5 bg-red-400 rounded-full animate-pulse" />
+                <span className="text-red-400 font-semibold text-sm">Recording... {recordingTime}s</span>
+              </div>
+            )}
+
+            {isScoring && (
+              <div className="flex items-center justify-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3">
+                <div className="w-2.5 h-2.5 bg-blue-400 rounded-full animate-pulse" />
+                <span className="text-blue-400 font-semibold text-sm">Analyzing pronunciation...</span>
+              </div>
+            )}
+
+            {currentScore && !isScoring && (
+              <div className={`rounded-xl p-4 ${currentScore.isCorrect ? "bg-green-400/10 border border-green-400/20" : "bg-orange-400/10 border border-orange-400/20"}`}>
+                <div className={`text-3xl font-bold mb-1 ${currentScore.isCorrect ? "text-green-400" : "text-orange-400"}`}>
+                  {currentScore.accuracy.toFixed(0)}%
+                </div>
+                <p className={`text-sm ${currentScore.isCorrect ? "text-green-400/80" : "text-orange-400/80"}`}>
+                  {currentScore.feedback}
                 </p>
               </div>
+            )}
 
-              {/* Recording Status */}
-              {isRecording && (
-                <div className="flex items-center justify-center gap-2 bg-red-50 border border-red-200 rounded-lg p-4">
-                  <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse" />
-                  <span className="text-red-700 font-semibold">
-                    녹음 중... {recordingTime}초
-                  </span>
-                </div>
+            <button
+              onClick={handleRecordPronunciation}
+              disabled={isScoring}
+              className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 ${
+                isRecording
+                  ? "bg-red-500 text-white hover:bg-red-400"
+                  : "bg-blue-500 text-white hover:bg-blue-400 blue-glow"
+              }`}
+            >
+              <Mic className="w-5 h-5" />
+              {isRecording ? "Stop Recording" : "Record"}
+            </button>
+
+            <div className="flex gap-3">
+              <button onClick={() => setShowMicMode(false)} className="flex-1 py-3 rounded-xl bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 transition-all text-sm">
+                Back
+              </button>
+              {currentScore && (
+                <button onClick={handleNext} className="flex-1 py-3 rounded-xl bg-blue-500 text-white font-bold hover:bg-blue-400 transition-all text-sm">
+                  Next →
+                </button>
               )}
-
-              {/* Scoring Status */}
-              {isScoring && (
-                <div className="flex items-center justify-center gap-2 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="w-3 h-3 bg-blue-600 rounded-full animate-pulse" />
-                  <span className="text-blue-700 font-semibold">
-                    발음 채점 중...
-                  </span>
-                </div>
-              )}
-
-              {/* Pronunciation Score */}
-              {currentScore && !isScoring && (
-                <div className={`rounded-lg p-6 ${
-                  currentScore.isCorrect 
-                    ? 'bg-green-50 border border-green-200' 
-                    : 'bg-orange-50 border border-orange-200'
-                }`}>
-                  <div className="flex items-center justify-center gap-2 mb-4">
-                    {currentScore.isCorrect ? (
-                      <CheckCircle2 className="w-8 h-8 text-green-600" />
-                    ) : (
-                      <AlertCircle className="w-8 h-8 text-orange-600" />
-                    )}
-                  </div>
-                  <p className={`text-3xl font-bold mb-2 ${
-                    currentScore.isCorrect ? 'text-green-600' : 'text-orange-600'
-                  }`}>
-                    {currentScore.accuracy.toFixed(0)}%
-                  </p>
-                  <p className={`text-sm ${
-                    currentScore.isCorrect ? 'text-green-700' : 'text-orange-700'
-                  }`}>
-                    {currentScore.feedback}
-                  </p>
-                </div>
-              )}
-
-              {/* Record Button */}
-              <Button
-                size="lg"
-                onClick={handleRecordPronunciation}
-                disabled={isScoring}
-                className={isRecording ? "bg-red-600 hover:bg-red-700" : ""}
-              >
-                <Mic className="w-5 h-5 mr-2" />
-                {isRecording ? "녹음 중지" : "발음 녹음"}
-              </Button>
-
-              {/* Navigation */}
-              <div className="flex gap-3 justify-center">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowPronunciationMode(false)}
-                >
-                  돌아가기
-                </Button>
-                {currentScore && (
-                  <Button onClick={handleNext}>
-                    다음 단어
-                  </Button>
-                )}
-              </div>
             </div>
-          </Card>
-        ) : (
-          <>
-            {/* Action Buttons */}
-            <div className="space-y-4">
-              <Button
-                size="lg"
-                className="w-full bg-blue-600 hover:bg-blue-700"
-                onClick={() => setShowPronunciationMode(true)}
-              >
-                <Mic className="w-5 h-5 mr-2" />
-                발음 녹음하기
-              </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="px-5 space-y-3">
+          <button
+            onClick={() => setShowMicMode(true)}
+            className="w-full py-4 rounded-2xl bg-blue-500 text-white font-bold flex items-center justify-center gap-2 hover:bg-blue-400 transition-all blue-glow"
+          >
+            <Mic className="w-5 h-5" /> Record Pronunciation
+          </button>
 
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  variant="outline"
-                  onClick={handleIncorrect}
-                >
-                  <XCircle className="w-4 h-4 mr-2" />
-                  틀렸어요
-                </Button>
-                <Button
-                  onClick={handleCorrect}
-                >
-                  <CheckCircle2 className="w-4 h-4 mr-2" />
-                  맞았어요
-                </Button>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => handleNext()}
+              className="py-3 rounded-xl bg-white/5 border border-white/10 text-white/50 font-medium flex items-center justify-center gap-2 hover:bg-white/10 transition-all"
+            >
+              <XCircle className="w-4 h-4 text-red-400/60" /> Incorrect
+            </button>
+            <button
+              onClick={() => { setCorrectAnswers(c => c + 1); handleNext(); }}
+              className="py-3 rounded-xl bg-green-400/10 border border-green-400/20 text-green-400 font-medium flex items-center justify-center gap-2 hover:bg-green-400/15 transition-all"
+            >
+              <CheckCircle2 className="w-4 h-4" /> Correct
+            </button>
+          </div>
+        </div>
+      )}
+
+      <BottomNav />
     </div>
   );
 }
