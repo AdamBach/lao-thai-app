@@ -1,6 +1,60 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { getDb } from "../db.js";
 import { beginnerLessons } from "../../drizzle/schema.js";
+import { createPool } from "mysql2/promise";
+
+function parseDbUrl(url: string) {
+  const u = new URL(url);
+  return {
+    host: u.hostname,
+    port: parseInt(u.port || "3306"),
+    user: u.username,
+    password: decodeURIComponent(u.password),
+    database: u.pathname.replace(/^\//, ""),
+    ssl: { rejectUnauthorized: false },
+  };
+}
+
+async function applySchema(): Promise<{ added: string[]; existing: string[]; error?: string }> {
+  const url = process.env.DATABASE_URL;
+  if (!url) return { added: [], existing: [], error: "No DATABASE_URL" };
+
+  const pool = createPool({ ...parseDbUrl(url), connectionLimit: 1 });
+  const added: string[] = [];
+  const existing: string[] = [];
+  try {
+    const [rows] = await pool.query<any[]>(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'passwordHash'`
+    );
+    if (rows.length === 0) {
+      await pool.query(`ALTER TABLE users ADD COLUMN passwordHash VARCHAR(255) NULL`);
+      added.push("users.passwordHash");
+    } else {
+      existing.push("users.passwordHash");
+    }
+    await pool.query(`CREATE TABLE IF NOT EXISTS beginner_lessons (
+      id INT AUTO_INCREMENT PRIMARY KEY, language ENUM('lao','thai') NOT NULL,
+      title VARCHAR(255) NOT NULL, description TEXT,
+      level ENUM('beginner','intermediate','advanced') NOT NULL DEFAULT 'beginner',
+      category VARCHAR(100) NOT NULL, orderIndex INT NOT NULL DEFAULT 0,
+      content JSON NOT NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS user_lesson_progress (
+      id INT AUTO_INCREMENT PRIMARY KEY, userId INT NOT NULL, lessonId INT NOT NULL,
+      completed TINYINT(1) NOT NULL DEFAULT 0, score INT, completedAt TIMESTAMP NULL,
+      createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_user_lesson (userId, lessonId)
+    )`);
+  } catch (e: any) {
+    return { added, existing, error: e.message };
+  } finally {
+    await pool.end().catch(() => {});
+  }
+  return { added, existing };
+}
 
 const LESSONS = [
   // ── THAI ──────────────────────────────────────────────────────────────
@@ -272,6 +326,12 @@ export async function seedLessonsIfEmpty() {
 }
 
 export function registerSeedRoute(app: Express) {
+  // GET /api/admin/fix-schema — apply missing columns/tables and return status
+  app.get("/api/admin/fix-schema", async (_req: Request, res: Response) => {
+    const result = await applySchema();
+    res.json(result);
+  });
+
   app.post("/api/admin/seed-lessons", async (req, res) => {
     const secret = req.headers["x-admin-secret"];
     if (!secret || secret !== process.env.ADMIN_SECRET) {
