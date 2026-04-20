@@ -3,23 +3,12 @@ import { getDb } from "../db.js";
 import { beginnerLessons } from "../../drizzle/schema.js";
 import { createPool } from "mysql2/promise";
 
-function parseDbUrl(url: string) {
-  const u = new URL(url);
-  return {
-    host: u.hostname,
-    port: parseInt(u.port || "3306"),
-    user: u.username,
-    password: decodeURIComponent(u.password),
-    database: u.pathname.replace(/^\//, ""),
-    ssl: { rejectUnauthorized: false },
-  };
-}
-
 async function applySchema(): Promise<{ added: string[]; existing: string[]; error?: string }> {
   const url = process.env.DATABASE_URL;
   if (!url) return { added: [], existing: [], error: "No DATABASE_URL" };
 
-  const pool = createPool({ ...parseDbUrl(url), connectionLimit: 1 });
+  // Pass raw URL — same as drizzle does internally
+  const pool = createPool(url);
   const added: string[] = [];
   const existing: string[] = [];
   try {
