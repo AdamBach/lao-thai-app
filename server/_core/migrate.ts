@@ -1,38 +1,43 @@
 /**
  * Startup migrations — safe to run on every boot.
- * Uses IF NOT EXISTS / information_schema checks so re-runs are no-ops.
+ * Uses the existing drizzle connection (same SSL config as the rest of the app).
  */
+import { sql } from "drizzle-orm";
 import { getDb } from "../db";
-import mysql from "mysql2/promise";
 
 export async function runMigrations() {
-  const url = process.env.DATABASE_URL;
-  if (!url) {
+  if (!process.env.DATABASE_URL) {
     console.warn("[Migrate] No DATABASE_URL — skipping migrations");
     return;
   }
 
-  let conn: mysql.Connection | null = null;
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Migrate] DB not available — skipping migrations");
+    return;
+  }
+
   try {
-    conn = await mysql.createConnection(url);
     console.log("[Migrate] Running startup migrations…");
 
     // 1. Add passwordHash column to users if missing
-    const [rows] = await conn.execute<mysql.RowDataPacket[]>(
-      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
-       WHERE TABLE_SCHEMA = DATABASE()
-         AND TABLE_NAME   = 'users'
-         AND COLUMN_NAME  = 'passwordHash'`
-    );
-    if (rows.length === 0) {
-      await conn.execute(
-        `ALTER TABLE users ADD COLUMN passwordHash VARCHAR(255) NULL`
-      );
+    const [rows] = await db.execute(sql`
+      SELECT COLUMN_NAME
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME   = 'users'
+        AND COLUMN_NAME  = 'passwordHash'
+    `);
+    const cols = rows as Array<{ COLUMN_NAME: string }>;
+    if (cols.length === 0) {
+      await db.execute(sql`
+        ALTER TABLE users ADD COLUMN passwordHash VARCHAR(255) NULL
+      `);
       console.log("[Migrate] ✓ Added passwordHash column to users");
     }
 
     // 2. Create beginner_lessons table if missing
-    await conn.execute(`
+    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS beginner_lessons (
         id          INT AUTO_INCREMENT PRIMARY KEY,
         language    ENUM('lao','thai') NOT NULL,
@@ -48,7 +53,7 @@ export async function runMigrations() {
     `);
 
     // 3. Create user_lesson_progress table if missing
-    await conn.execute(`
+    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS user_lesson_progress (
         id          INT AUTO_INCREMENT PRIMARY KEY,
         userId      INT                NOT NULL,
@@ -62,11 +67,9 @@ export async function runMigrations() {
       )
     `);
 
-    console.log("[Migrate] ✓ All migrations applied");
+    console.log("[Migrate] ✓ All migrations complete");
   } catch (err) {
-    console.error("[Migrate] Migration error:", err);
-    // Don't crash the server — just log and continue
-  } finally {
-    if (conn) await conn.end();
+    // Log the real error so Railway logs show what went wrong
+    console.error("[Migrate] Migration error (server will still start):", err);
   }
 }

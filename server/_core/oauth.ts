@@ -74,8 +74,9 @@ export function registerOAuthRoutes(app: Express) {
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
       res.json({ success: true, user: { id: user.id, name: user.name, email: user.email } });
     } catch (error) {
-      console.error("[Auth] Register failed", error);
-      res.status(500).json({ error: "Registration failed" });
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("[Auth] Register failed:", msg, error);
+      res.status(500).json({ error: "Registration failed", detail: msg });
     }
   });
 
@@ -113,8 +114,9 @@ export function registerOAuthRoutes(app: Express) {
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
       res.json({ success: true, user: { id: user.id, name: user.name, email: user.email } });
     } catch (error) {
-      console.error("[Auth] Login failed", error);
-      res.status(500).json({ error: "Login failed" });
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("[Auth] Login failed:", msg, error);
+      res.status(500).json({ error: "Login failed", detail: msg });
     }
   });
 }

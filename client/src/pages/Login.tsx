@@ -38,7 +38,8 @@ export default function Login() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error ?? "Something went wrong");
+        const detail = data.detail ? ` (${data.detail})` : "";
+        setError((data.error ?? "Something went wrong") + detail);
         return;
       }
 
