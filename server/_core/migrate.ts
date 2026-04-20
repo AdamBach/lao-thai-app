@@ -1,41 +1,48 @@
 /**
- * Startup migrations — safe to run on every boot.
- * Creates its own mysql2/promise connection so it works independently
- * of drizzle's connection pool.
+ * Startup migrations — uses the same underlying mysql2 pool that drizzle
+ * already has open, so SSL and connection config are identical.
  */
+import { getDb } from "../db";
+import type { RowDataPacket } from "mysql2";
 
 export async function runMigrations() {
-  const url = process.env.DATABASE_URL;
-  if (!url) {
+  if (!process.env.DATABASE_URL) {
     console.warn("[Migrate] No DATABASE_URL — skipping migrations");
     return;
   }
 
-  // Dynamic import keeps the module tree clean
-  const mysql = await import("mysql2/promise");
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Migrate] DB not available — skipping migrations");
+    return;
+  }
 
-  let conn: Awaited<ReturnType<typeof mysql.createConnection>> | null = null;
+  // drizzle(connectionString) wraps a mysql2 callback-pool in db.$client
+  // .promise() upgrades it to the promise API without opening a new connection
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pool = (db as any).$client.promise() as {
+    query: (sql: string, params?: unknown[]) => Promise<[RowDataPacket[], unknown]>;
+  };
+
   try {
-    console.log("[Migrate] Connecting for startup migrations…");
-    conn = await mysql.createConnection(url);
+    console.log("[Migrate] Running startup migrations…");
 
-    // 1. Add passwordHash column to users if missing
-    const [rows] = await conn.query<mysql.RowDataPacket[]>(
-      `SELECT COLUMN_NAME
-       FROM information_schema.COLUMNS
+    // 1. Add passwordHash column if missing
+    const [cols] = await pool.query(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
        WHERE TABLE_SCHEMA = DATABASE()
          AND TABLE_NAME   = 'users'
          AND COLUMN_NAME  = 'passwordHash'`
     );
-    if (rows.length === 0) {
-      await conn.query(`ALTER TABLE users ADD COLUMN passwordHash VARCHAR(255) NULL`);
-      console.log("[Migrate] ✓ Added passwordHash column to users");
+    if (!Array.isArray(cols) || cols.length === 0) {
+      await pool.query(`ALTER TABLE users ADD COLUMN passwordHash VARCHAR(255) NULL`);
+      console.log("[Migrate] ✓ Added passwordHash to users");
     } else {
-      console.log("[Migrate] passwordHash column already present");
+      console.log("[Migrate] passwordHash already exists");
     }
 
-    // 2. Ensure beginner_lessons exists
-    await conn.query(`
+    // 2. beginner_lessons
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS beginner_lessons (
         id          INT AUTO_INCREMENT PRIMARY KEY,
         language    ENUM('lao','thai') NOT NULL,
@@ -50,8 +57,8 @@ export async function runMigrations() {
       )
     `);
 
-    // 3. Ensure user_lesson_progress exists
-    await conn.query(`
+    // 3. user_lesson_progress
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS user_lesson_progress (
         id          INT AUTO_INCREMENT PRIMARY KEY,
         userId      INT NOT NULL,
@@ -65,13 +72,8 @@ export async function runMigrations() {
       )
     `);
 
-    console.log("[Migrate] ✓ All migrations complete");
-  } catch (err: unknown) {
-    // Log the full error so Railway logs show what went wrong
-    console.error("[Migrate] Migration failed:", err);
-  } finally {
-    if (conn) {
-      try { await conn.end(); } catch { /* ignore close errors */ }
-    }
+    console.log("[Migrate] ✓ All done");
+  } catch (err) {
+    console.error("[Migrate] Error:", err);
   }
 }
