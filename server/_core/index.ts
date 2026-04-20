@@ -6,6 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerAudioGenRoute } from "./audioGen";
 import { registerSeedRoute, seedLessonsIfEmpty } from "./seedRoute";
+import { runMigrations } from "./migrate";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -61,10 +62,12 @@ async function startServer() {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
+  // Run DB migrations then seed before accepting traffic
+  await runMigrations();
+  await seedLessonsIfEmpty().catch(() => {});
+
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
-    // Seed lessons on startup if DB is empty
-    seedLessonsIfEmpty().catch(() => {});
   });
 }
 
