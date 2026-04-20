@@ -168,20 +168,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Upgrade banner */}
-      <div className="px-5 mb-6">
-        <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 border border-blue-500/20 rounded-2xl p-5 flex items-center justify-between">
-          <div>
-            <div className="text-white font-bold mb-1">Go Premium</div>
-            <div className="text-white/50 text-xs">Unlock all lessons + AI features</div>
-          </div>
-          <div className="text-right">
-            <div className="text-blue-400 font-bold">$9.99</div>
-            <div className="text-white/30 text-xs">/month</div>
-          </div>
-        </div>
-      </div>
-
       <BottomNav />
     </div>
   );
