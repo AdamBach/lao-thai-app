@@ -58,27 +58,14 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Pricing teaser */}
+        {/* Social proof */}
         <div className="px-6 pb-16 max-w-sm mx-auto w-full">
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-5 text-center">
-            <p className="text-blue-400 font-semibold mb-1">Free to start</p>
-            <p className="text-white/50 text-sm">Upgrade to Premium for unlimited access</p>
-            <div className="flex items-center justify-center gap-4 mt-3">
-              <div className="text-center">
-                <div className="text-white font-bold">Free</div>
-                <div className="text-white/40 text-xs">3 lessons</div>
-              </div>
-              <div className="text-white/20">|</div>
-              <div className="text-center">
-                <div className="text-blue-400 font-bold">$9.99/mo</div>
-                <div className="text-white/40 text-xs">Unlimited</div>
-              </div>
-              <div className="text-white/20">|</div>
-              <div className="text-center">
-                <div className="text-purple-400 font-bold">$19.99/mo</div>
-                <div className="text-white/40 text-xs">VIP + Tutor</div>
-              </div>
-            </div>
+          <div className="flex items-center justify-center gap-2 text-white/30 text-sm">
+            <span>🇬🇧 English</span>
+            <span>·</span>
+            <span>🇨🇳 中文</span>
+            <span>·</span>
+            <span>more coming</span>
           </div>
         </div>
       </div>

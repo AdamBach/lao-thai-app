@@ -1,10 +1,8 @@
+"use client";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loader2, Eye, EyeOff } from "lucide-react";
 
 type Mode = "login" | "register";
 
@@ -14,6 +12,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -43,9 +42,8 @@ export default function Login() {
         return;
       }
 
-      // Refresh auth state then go home
       await utils.auth.me.invalidate();
-      navigate("/");
+      navigate("/lessons");
     } catch {
       setError("Network error — please try again");
     } finally {
@@ -54,104 +52,123 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-amber-50 px-4">
-      <Card className="w-full max-w-md shadow-lg">
-        <CardHeader className="text-center space-y-2">
-          <div className="text-4xl mb-1">🇱🇦🇹🇭</div>
-          <CardTitle className="text-2xl font-bold">
-            {mode === "login" ? "Welcome back" : "Create account"}
-          </CardTitle>
-          <CardDescription>
-            {mode === "login"
-              ? "Sign in to continue learning Lao & Thai"
-              : "Start your Lao & Thai language journey"}
-          </CardDescription>
-        </CardHeader>
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5">
+      {/* Logo */}
+      <div className="text-center mb-10">
+        <div className="text-5xl mb-3">🇱🇦🇹🇭</div>
+        <h1 className="text-2xl font-bold text-white">
+          {mode === "login" ? "Welcome back" : "Create account"}
+        </h1>
+        <p className="text-white/40 text-sm mt-1">
+          {mode === "login" ? "Sign in to continue learning" : "Start your language journey"}
+        </p>
+      </div>
 
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === "register" && (
-              <div className="space-y-1">
-                <Label htmlFor="name">Name (optional)</Label>
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder="Your name"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  autoComplete="name"
-                />
-              </div>
-            )}
-
-            <div className="space-y-1">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                autoComplete="email"
+      {/* Form card */}
+      <div className="w-full max-w-sm bg-card border border-white/8 rounded-3xl p-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {mode === "register" && (
+            <div>
+              <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5">
+                Name <span className="text-white/25">(optional)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="Your name"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                autoComplete="name"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/25 focus:outline-none focus:border-blue-500/50 focus:bg-blue-500/5 transition-all text-sm"
               />
             </div>
+          )}
 
-            <div className="space-y-1">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
+          <div>
+            <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5">
+              Email
+            </label>
+            <input
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/25 focus:outline-none focus:border-blue-500/50 focus:bg-blue-500/5 transition-all text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="text-white/50 text-xs font-medium uppercase tracking-wider block mb-1.5">
+              Password
+            </label>
+            <div className="relative">
+              <input
+                type={showPass ? "text" : "password"}
                 placeholder={mode === "register" ? "At least 6 characters" : "Your password"}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 pr-11 text-white placeholder-white/25 focus:outline-none focus:border-blue-500/50 focus:bg-blue-500/5 transition-all text-sm"
               />
+              <button
+                type="button"
+                onClick={() => setShowPass(s => !s)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/25 hover:text-white/60 transition-colors"
+              >
+                {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
-
-            {error && (
-              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
-                {error}
-              </p>
-            )}
-
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading
-                ? "Please wait..."
-                : mode === "login"
-                ? "Sign in"
-                : "Create account"}
-            </Button>
-          </form>
-
-          <div className="mt-4 text-center text-sm text-muted-foreground">
-            {mode === "login" ? (
-              <>
-                Don't have an account?{" "}
-                <button
-                  type="button"
-                  onClick={() => { setMode("register"); setError(""); }}
-                  className="text-primary font-medium hover:underline"
-                >
-                  Sign up
-                </button>
-              </>
-            ) : (
-              <>
-                Already have an account?{" "}
-                <button
-                  type="button"
-                  onClick={() => { setMode("login"); setError(""); }}
-                  className="text-primary font-medium hover:underline"
-                >
-                  Sign in
-                </button>
-              </>
-            )}
           </div>
-        </CardContent>
-      </Card>
+
+          {error && (
+            <div className="bg-red-400/10 border border-red-400/20 rounded-xl px-4 py-3">
+              <p className="text-red-400 text-sm">{error}</p>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-4 rounded-xl bg-blue-500 text-white font-bold flex items-center justify-center gap-2 hover:bg-blue-400 transition-all blue-glow disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+          >
+            {loading ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Please wait...</>
+            ) : mode === "login" ? "Sign In" : "Create Account"}
+          </button>
+        </form>
+
+        <div className="mt-5 text-center text-sm text-white/30">
+          {mode === "login" ? (
+            <>
+              No account?{" "}
+              <button
+                type="button"
+                onClick={() => { setMode("register"); setError(""); }}
+                className="text-blue-400 font-semibold hover:text-blue-300 transition-colors"
+              >
+                Sign up free
+              </button>
+            </>
+          ) : (
+            <>
+              Already have an account?{" "}
+              <button
+                type="button"
+                onClick={() => { setMode("login"); setError(""); }}
+                className="text-blue-400 font-semibold hover:text-blue-300 transition-colors"
+              >
+                Sign in
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <p className="text-white/20 text-xs mt-6 text-center">
+        Free to use · No credit card needed
+      </p>
     </div>
   );
 }

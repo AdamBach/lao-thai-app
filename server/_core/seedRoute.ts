@@ -255,6 +255,22 @@ const LESSONS = [
   },
 ];
 
+/** Called automatically on server startup — seeds lessons if the table is empty */
+export async function seedLessonsIfEmpty() {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    const existing = await db.select().from(beginnerLessons).limit(1);
+    if (existing.length > 0) return; // already seeded
+    for (const lesson of LESSONS) {
+      await db.insert(beginnerLessons).values(lesson);
+    }
+    console.log(`[Seed] Auto-seeded ${LESSONS.length} lessons.`);
+  } catch (err) {
+    console.warn("[Seed] Auto-seed failed:", err);
+  }
+}
+
 export function registerSeedRoute(app: Express) {
   app.post("/api/admin/seed-lessons", async (req, res) => {
     const secret = req.headers["x-admin-secret"];
