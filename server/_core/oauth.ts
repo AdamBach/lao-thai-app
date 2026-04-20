@@ -44,7 +44,20 @@ export function registerOAuthRoutes(app: Express) {
     try {
       const existing = await db.getUserByEmail(emailLower);
       if (existing) {
-        res.status(409).json({ error: "An account with this email already exists" });
+        // If they registered via Google (no password yet), let them add a password
+        if (!existing.passwordHash) {
+          const passwordHash = await hashPassword(password);
+          await db.upsertUser({ openId: existing.openId, passwordHash, loginMethod: "email" });
+          const sessionToken = await sdk.createSessionToken(existing.openId, {
+            name: existing.name ?? "",
+            expiresInMs: ONE_YEAR_MS,
+          });
+          const cookieOptions = getSessionCookieOptions(req);
+          res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+          res.json({ success: true, user: { id: existing.id, name: existing.name, email: existing.email } });
+          return;
+        }
+        res.status(409).json({ error: "An account with this email already exists. Please sign in instead." });
         return;
       }
 

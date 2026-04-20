@@ -315,10 +315,28 @@ export async function seedLessonsIfEmpty() {
 }
 
 export function registerSeedRoute(app: Express) {
-  // GET /api/admin/fix-schema — apply missing columns/tables and return status
+  // GET /api/admin/fix-schema — apply missing columns/tables and force re-seed lessons
   app.get("/api/admin/fix-schema", async (_req: Request, res: Response) => {
-    const result = await applySchema();
-    res.json(result);
+    const schema = await applySchema();
+
+    // Force re-seed lessons with current English-only seed data
+    let seedResult = { seeded: 0, error: "" };
+    try {
+      const db = await getDb();
+      if (db) {
+        await db.delete(beginnerLessons);
+        let count = 0;
+        for (const lesson of LESSONS) {
+          await db.insert(beginnerLessons).values(lesson);
+          count++;
+        }
+        seedResult.seeded = count;
+      }
+    } catch (e: any) {
+      seedResult.error = e.message;
+    }
+
+    res.json({ ...schema, seedResult });
   });
 
   app.post("/api/admin/seed-lessons", async (req, res) => {

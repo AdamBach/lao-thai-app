@@ -205,8 +205,22 @@ export default function PronunciationPractice() {
                   {card?.romanization && (
                     <div className="text-blue-400/70 text-xl">{card.romanization}</div>
                   )}
-                  <div className="mt-8 flex items-center gap-2 text-white/20 text-sm">
-                    <span>Tap to reveal meaning</span>
+                  <div className="mt-6 flex items-center gap-3">
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        if (!word || !window.speechSynthesis) return;
+                        window.speechSynthesis.cancel();
+                        const utt = new SpeechSynthesisUtterance(word);
+                        utt.lang = language === "thai" ? "th-TH" : "lo-LA";
+                        utt.rate = 0.8;
+                        window.speechSynthesis.speak(utt);
+                      }}
+                      className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-white/30 hover:text-white/60 transition-colors text-sm"
+                    >
+                      <Volume2 className="w-3.5 h-3.5" /> Listen
+                    </button>
+                    <span className="text-white/15 text-sm">· tap card to flip</span>
                   </div>
                 </div>
 

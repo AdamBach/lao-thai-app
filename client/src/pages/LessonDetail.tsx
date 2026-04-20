@@ -316,14 +316,25 @@ export default function LessonDetail() {
                   <span className="text-blue-400 text-sm font-semibold">{activeWord.tonePattern}</span>
                 </div>
               )}
-              {audioData?.audioUrl && (
-                <button
-                  onClick={() => new Audio(audioData.audioUrl!).play()}
-                  className="mt-4 flex items-center gap-2 mx-auto bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white/50 hover:text-white hover:bg-white/10 transition-all text-sm"
-                >
-                  <Volume2 className="w-4 h-4" /> Play Audio
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  if (audioData?.audioUrl) {
+                    new Audio(audioData.audioUrl).play().catch(() => {});
+                  } else {
+                    // Web Speech API fallback — works well for Thai, adequate for Lao
+                    const text = displayWord(activeWord);
+                    if (!text || !window.speechSynthesis) return;
+                    window.speechSynthesis.cancel();
+                    const utt = new SpeechSynthesisUtterance(text);
+                    utt.lang = lang === "thai" ? "th-TH" : "lo-LA";
+                    utt.rate = 0.8;
+                    window.speechSynthesis.speak(utt);
+                  }
+                }}
+                className="mt-4 flex items-center gap-2 mx-auto bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white/50 hover:text-white hover:bg-white/10 transition-all text-sm"
+              >
+                <Volume2 className="w-4 h-4" /> Listen
+              </button>
             </div>
 
             {/* Navigation */}
