@@ -18,9 +18,16 @@ export default function Login() {
 
   const utils = trpc.useUtils();
   const search = useSearch();
+  const [googleEnabled, setGoogleEnabled] = useState(false);
 
-  // Show error from Google OAuth redirect (e.g. ?error=google_denied)
   useEffect(() => {
+    // Fetch runtime config to know if Google OAuth is available
+    fetch("/api/auth/config")
+      .then(r => r.json())
+      .then((cfg: { googleEnabled?: boolean }) => setGoogleEnabled(!!cfg.googleEnabled))
+      .catch(() => {});
+
+    // Show error from Google OAuth redirect (e.g. ?error=google_denied)
     const params = new URLSearchParams(search);
     const err = params.get("error");
     if (err) {
@@ -82,8 +89,8 @@ export default function Login() {
         </p>
       </div>
 
-      {/* Google button — only shown when GOOGLE_CLIENT_ID is configured */}
-      {import.meta.env.VITE_GOOGLE_ENABLED === "true" && (
+      {/* Google button — only shown when server has GOOGLE_CLIENT_ID set */}
+      {googleEnabled && (
         <>
           <div className="w-full max-w-sm mb-3">
             <a

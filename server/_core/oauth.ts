@@ -121,6 +121,11 @@ export function registerOAuthRoutes(app: Express) {
     }
   });
 
+  // GET /api/auth/config — runtime feature flags for the frontend
+  app.get("/api/auth/config", (_req: Request, res: Response) => {
+    res.json({ googleEnabled: !!ENV.googleClientId });
+  });
+
   // GET /api/auth/google — redirect to Google consent screen
   app.get("/api/auth/google", (req: Request, res: Response) => {
     const clientId = ENV.googleClientId;
